@@ -1,0 +1,208 @@
+apply plugin: 'java'
+apply plugin: 'jacoco'
+apply plugin: 'findbugs'
+apply plugin: 'checkstyle'
+//apply plugin: 'distribution'
+//apply plugin: 'maven'
+//apply plugin: 'groovy'
+//apply plugin: 'idea'
+
+// check the new version of dependencies
+// USE: ./gradlew cDU
+// SEE: https://www.jianshu.com/p/a72569b0fdb7
+apply plugin: 'name.remal.check-dependency-updates'
+
+/*
+plugins {
+  id "name.remal.check-dependency-updates" version "1.0.211"
+}
+*/
+
+buildscript {
+    repositories {
+		maven {
+	      url "https://plugins.gradle.org/m2/"
+    	}
+        jcenter()
+    }
+
+  dependencies {
+    classpath "name.remal:gradle-plugins:1.0.211"
+  }
+
+}
+
+version = '0.2'
+
+configurations {
+    provided
+//    integrationTestCompile.extendsFrom testCompile
+//    integrationTestRuntime.extendsFrom testRuntime
+
+//    all*.exclude group:'org.slf4j', module:'slf4j-nop'
+//    all*.exclude group:'org.slf4j', module:'slf4j-jdk14'
+
+    //no effect
+//    testImplementation.exclude group:'org.slf4j', module:'slf4j-nop'
+//    testImplementation.exclude group:'org.slf4j', module:'slf4j-jdk14'
+
+
+}
+
+sourceSets {
+    main {
+        compileClasspath += configurations.provided
+        test.compileClasspath += configurations.provided
+        test.runtimeClasspath += configurations.provided
+    }
+
+
+}
+
+repositories {
+    maven {
+        url "https://dl.bintray.com/omegat-org/maven"
+    }
+    jcenter()
+}
+
+dependencies {
+    //no compile,because slf4j-api is included in OmegaT ifself
+    provided 'org.slf4j:slf4j-api:1.7.25'
+
+    provided 'org.omegat:omegat:4.3.0'
+    provided 'commons-io:commons-io:2.4'
+    provided 'commons-lang:commons-lang:2.6'
+    // no need.We can use slf4j-jdk14 which is included by "org.omegat:omegat:4.3.0"
+//    provided 'org.slf4j:slf4j-nop:1.7.21'
+    testCompile 'junit:junit:4.12'
+
+    //testCompile 'xmlunit:xmlunit:1.6'
+    //testCompile 'org.madlonkay.supertmxmerge:supertmxmerge:2.0.1'
+
+    //testCompile 'org.apache.logging.log4j:log4j-api:2.13.3'
+    //testCompile 'org.apache.logging.log4j:log4j-core:2.13.3'
+//    testCompile 'org.apache.logging.log4j:log4j-slf4j-impl:2.13.3'
+
+    // https://mvnrepository.com/artifact/cn.hutool/hutool-json
+    compile group: 'cn.hutool', name: 'hutool-json', version: '5.4.0'
+    // https://mvnrepository.com/artifact/cn.hutool/hutool-http
+    compile group: 'cn.hutool', name: 'hutool-http', version: '5.4.0'
+    // https://mvnrepository.com/artifact/cn.hutool/hutool-crypto
+    //compile group: 'cn.hutool', name: 'hutool-crypto', version: '5.4.0'
+
+}
+//test.useTestNG()
+
+tasks.withType(JavaCompile) {
+    options.compilerArgs << "-Xlint:deprecation" << "-Xlint:unchecked"
+    options.encoding = "UTF-8"
+}
+
+//always generate the jacocoTestReport or run the test task before generating the report explicitly.
+test {
+    finalizedBy jacocoTestReport // report is always generated after tests run
+}
+jacocoTestReport {
+    dependsOn test // tests are required to run before generating the report
+}
+
+
+
+// Build FatJar
+//
+// It is easy to install a 3rd-party OmegaT plugin which is
+// a single jar file, because all user should do is just to put the jar
+// file into plugins directory.
+jar {
+    // make gradle5 compatible
+//    from files(sourceSets.main.output.classesDir)
+    from sourceSets.main.output.classesDirs
+
+    from { configurations.compile.collect { zipTree(it) } } {
+        exclude "META-INF/MANIFEST.MF"
+    }
+    manifest {
+        // plugin's main class name is defined in gradle.properties file.
+        attributes("OmegaT-Plugins": pluginMainClass)
+    }
+}
+
+//checkstyle
+checkstyle {
+    config = resources.text.fromFile("${rootProject.projectDir}/config/checkstyle/checkstyle.xml")
+    ignoreFailures = true
+    toolVersion = '7.1'
+}
+tasks.checkstyleMain.setGroup('Verification')
+
+
+// Treat findbugs failure as warning
+findbugs {
+    ignoreFailures = true
+}
+tasks.withType(FindBugs) {
+    reports {
+        xml.enabled = false
+        html.enabled = true
+    }
+	showProgress = true
+    setGroup('Verification')
+}
+
+// Force prevent checkstyle/findbugs on Test.
+task checkstyleTest(overwrite: true) {
+    doLast {
+
+    }
+}
+task findbugsTest(overwrite: true) {
+    doLast {
+
+    }
+}
+
+
+
+
+
+// Hack for IntelliJ IDEA 
+//idea {
+//    module {
+//        testSourceDirs += file('src/integration-test/java')
+//    }
+//}
+
+task sourceJar(type: Jar) {
+    from sourceSets.main.allSource
+    classifier = 'sources'
+}
+
+javadoc {
+    classpath += configurations.provided
+    options.locale = 'en_US'
+    options.encoding = 'UTF-8'
+    options.charSet = 'UTF-8'
+    options.links 'http://docs.oracle.com/javase/8/docs/api'
+}
+/*
+groovydoc {
+    classpath += configurations.provided
+}
+*/
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from javadoc.destinationDir
+}
+
+
+
+artifacts {
+    archives jar
+    archives sourceJar
+    archives javadocJar
+}
+
+
+
